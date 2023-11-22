@@ -1,0 +1,292 @@
+WALMART SALES ANALYSIS
+
+-- Create table
+CREATE TABLE IF NOT EXISTS walmartSales(
+	invoice_id VARCHAR(30) NOT NULL PRIMARY KEY,
+    branch VARCHAR(5) NOT NULL,
+    city VARCHAR(30) NOT NULL,
+    customer_type VARCHAR(30) NOT NULL,
+    gender VARCHAR(30) NOT NULL,
+    product_line VARCHAR(100) NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,
+    quantity INT NOT NULL,
+    tax_pct FLOAT(6,4) NOT NULL,
+    total DECIMAL(12, 4) NOT NULL,
+    date DATETIME NOT NULL,
+    time TIME NOT NULL,
+    payment VARCHAR(15) NOT NULL,
+    cogs DECIMAL(10,2) NOT NULL,
+    gross_margin_pct FLOAT(11,9),
+    gross_income DECIMAL(12, 4),
+    rating FLOAT(2, 1)
+);
+
+-- Data cleaning
+SELECT *
+FROM walmartSales
+
+
+-- Add the time_of_day column
+SELECT
+	time,
+	(CASE
+		WHEN `time` BETWEEN "00:00:00" AND "12:00:00" THEN "Morning"
+        WHEN `time` BETWEEN "12:01:00" AND "16:00:00" THEN "Afternoon"
+        ELSE "Evening"
+    END) AS time_of_day
+FROM walmartSales
+
+
+ALTER TABLE walmartSales ADD COLUMN time_of_day VARCHAR(20);
+
+
+UPDATE walmartSales
+SET time_of_day = (
+	CASE
+		WHEN `time` BETWEEN "00:00:00" AND "12:00:00" THEN "Morning"
+        WHEN `time` BETWEEN "12:01:00" AND "16:00:00" THEN "Afternoon"
+        ELSE "Evening"
+    END
+);
+
+
+-- Add day_name column
+SELECT
+	date,
+	DAYNAME(date)
+FROM walmartSales
+
+ALTER TABLE walmartSales ADD COLUMN day_name VARCHAR(10);
+
+UPDATE walmartSales
+SET day_name = DAYNAME(date);
+
+
+-- Add month_name column
+SELECT
+	date,
+	MONTHNAME(date)
+FROM walmartSales
+
+
+PRODUCT ANALYSIS
+
+How many unique product lines does the data have?
+SELECT COUNT(DISTINCT product_line) AS unique_product_lines
+FROM walmartSales;
+
+What is the most common payment method?
+SELECT payment_method, COUNT(*) AS payment_count
+FROM walmartSales
+GROUP BY payment_method
+ORDER BY payment_count DESC
+LIMIT 1;
+
+What is the most selling product line?
+SELECT product_line, SUM(quantity) AS total_quantity_sold
+FROM walmartSales
+GROUP BY product_line
+ORDER BY total_quantity_sold DESC
+LIMIT 1;
+
+What is the total revenue by month?
+SELECT MONTH(date) AS month, SUM(total) AS total_revenue
+FROM walmartSales
+GROUP BY month
+ORDER BY month;
+
+What month had the largest COGS?
+SELECT MONTH(date) AS month, SUM(cogs) AS total_cogs
+FROM walmartSales
+GROUP BY month
+ORDER BY total_cogs DESC
+LIMIT 1;
+
+What product line had the largest revenue?
+SELECT product_line, SUM(total) AS total_revenue
+FROM walmartSales
+GROUP BY product_line
+ORDER BY total_revenue DESC
+LIMIT 1;
+
+What is the city with the largest revenue?
+SELECT city, SUM(total) AS total_revenue
+FROM walmartSales
+GROUP BY city
+ORDER BY total_revenue DESC
+LIMIT 1;
+
+
+What product line had the largest VAT?
+SELECT product_line, SUM(tax_pct) AS total_vat
+FROM walmartSales
+GROUP BY product_line
+ORDER BY total_vat DESC
+LIMIT 1;
+
+Fetch each product line and add a column to those product line showing "Good", "Bad". Good if its greater than average sales
+WITH avg_sales AS (
+    SELECT AVG(total) AS avg_total_sales
+    FROM walmartSales
+)
+SELECT
+    product_line,
+    total,
+    CASE WHEN total > avg_total_sales THEN 'Good' ELSE 'Bad' END AS sales_category
+FROM walmartSales, avg_sales;
+
+Which branch sold more products than average product sold?
+WITH avg_product_sold AS (
+    SELECT AVG(quantity) AS avg_quantity_sold
+    FROM walmartSales
+)
+SELECT
+    branch,
+    SUM(quantity) AS total_quantity_sold
+FROM walmartSales, avg_product_sold
+GROUP BY branch
+HAVING total_quantity_sold > avg_quantity_sold;
+
+What is the most common product line by gender?
+SELECT
+    gender,
+    product_line,
+    COUNT(*) AS product_count
+FROM walmartSales
+GROUP BY gender, product_line
+ORDER BY gender, product_count DESC;
+
+What is the average rating of each product line? 
+SELECT
+    product_line,
+    AVG(rating) AS average_rating
+FROM walmartSales
+GROUP BY product_line;
+
+Seasonal Product Performance
+-- SELECT
+    month_name,
+    product_line,
+    SUM(gross_income) AS total_sales,
+    SUM(gross_income) / SUM(SUM(gross_income)) OVER (PARTITION BY month_name) * 100 AS percentage_of_total_sales,
+    LAG(SUM(gross_income)) OVER (PARTITION BY product_line ORDER BY month_name) AS last_month_sales,
+    CASE
+        WHEN LAG(SUM(gross_income)) OVER (PARTITION BY product_line ORDER BY month_name) IS NULL THEN NULL
+        ELSE (SUM(gross_income) - LAG(SUM(gross_income)) OVER (PARTITION BY product_line ORDER BY month_name)) / LAG(SUM(gross_income)) OVER (PARTITION BY product_line ORDER BY month_name) * 100
+    END AS sales_growth_rate
+FROM walmartSales
+GROUP BY month_name, product_line
+ORDER BY month_name, product_line; 
+
+MONTH_ON_MONTH - 
+with TopProducts as 
+(SELECT product_line, SUM(total) AS total_sales
+FROM walmartSales
+GROUP BY product_line
+ORDER BY total_sales DESC
+)
+SELECT tp.product_line, tp.total_sales, ws.month_name AS month,
+    SUM(ws.gross_income) AS monthly_sales
+FROM TopProducts tp
+JOIN walmartSales ws ON tp.product_line = ws.product_line
+GROUP BY tp.product_line, tp.total_sales, ws.month_name
+ORDER BY tp.total_sales DESC,ws.month_name;
+
+
+CUSTOMER ANALYSIS-
+How many unique customer types does the data have?
+SELECT COUNT(DISTINCT customer_type) AS unique_customer_types
+FROM walmartSales;
+
+How many unique payment methods does the data have?
+SELECT COUNT(DISTINCT payment_method) AS unique_payment_methods
+FROM walmartSales;
+
+What is the most common customer type?
+SELECT
+    customer_type,
+    COUNT(*) AS customer_count
+FROM walmartSales
+GROUP BY customer_type
+ORDER BY customer_count DESC
+LIMIT 1;
+
+Which customer type buys the most?
+SELECT
+    customer_type,
+    SUM(quantity) AS total_quantity_bought
+FROm  walmartSales
+GROUP BY customer_type
+ORDER BY total_quantity_bought DESC
+LIMIT 1;
+
+What is the gender of most of the customers?
+SELECT
+    gender,
+    COUNT(*) AS gender_count
+FROM walmartSales
+GROUP BY gender
+ORDER BY gender_count DESC
+LIMIT 1;
+
+Customer Type Spending Habits
+SELECT
+    customer_type,
+    AVG(quantity) AS average_quantity,
+    AVG(unit_price) AS average_unit_price,
+    AVG(gross_income) AS average_gross_income
+FROM walmartSales
+GROUP BY customer_type; 
+
+Gender-based Purchasing Patterns
+SELECT
+    gender,
+    product_line,
+    AVG(quantity) AS average_quantity,
+    AVG(unit_price) AS average_unit_price,
+    AVG(gross_income) AS average_gross_income
+FROM walmartSales
+GROUP BY gender, product_line ;
+
+
+Payment Method Analysis
+SELECT
+    payment,
+    product_line,
+    customer_type,
+    COUNT(*) AS transaction_count
+FROM walmartSales
+WHERE payment IS NOT NULL AND product_line IS NOT NULL
+AND customer_type IS NOT NULL
+GROUP BY payment, product_line, customer_type
+ORDER BY payment, product_line, customer_type;
+
+Customer Purchase Time Analysis
+SELECT
+    customer_type,
+    DAYNAME(date) AS purchase_day,
+    COUNT(*) AS transaction_count
+FROM walmartSales
+WHERE customer_type IS NOT NULL
+AND date IS NOT NULL
+GROUP BY customer_type, DAYNAME(date)
+ORDER BY customer_type,  purchase_day;
+
+
+Number of sales made in each time of the day per weekday
+SELECT
+    DAYNAME(date) AS weekday,
+    DAY_TIME,
+    COUNT(*) AS sales_count
+FROM walmartSales
+GROUP BY weekday, DAY_TIME
+ORDER By weekday, DAY_TIME;
+
+Which of the customer types brings the most revenue?
+SELECT
+    customer_type,
+    SUM(total) AS total_revenue
+FROM walmartSales
+GROUP BY customer_type
+ORDER BY total_revenue DESC
+LIMIT 1;
